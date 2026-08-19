@@ -10,18 +10,68 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Arbitrage Bot is Running 24/7!"
+    return "Paper Trading Bot is Active and Running 24/7!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# Binance Setup
+# Binance API Setup
 binance = ccxt.binance()
 
-# Arbitrage Monitoring Loop
+# Paper Trading Virtual Portfolio Setup
+paper_wallet = {
+    "USDT": 1000.0,  # Starting Virtual Balance: $1,000
+    "ETH": 0.0,
+    "total_profit": 0.0,
+    "trades_count": 0
+}
+
+def simulate_paper_trade(cex_price, dex_price, spread):
+    global paper_wallet
+    trade_amount_usdt = 100.0  # Har trade par $100 ka risk/amount
+    
+    if paper_wallet["USDT"] < trade_amount_usdt:
+        print("⚠️ Paper Trading Alert: Low Balance to execute trade.")
+        return
+
+    # Case 1: Binance par sasta hai, Dex par mehnga -> Buy on Binance, Sell on Dex
+    if cex_price < dex_price:
+        buy_price = cex_price
+        sell_price = dex_price
+        buy_venue = "Binance"
+        sell_venue = "Uniswap V3"
+    else:
+        buy_price = dex_price
+        sell_price = cex_price
+        buy_venue = "Uniswap V3"
+        sell_venue = "Binance"
+
+    eth_bought = trade_amount_usdt / buy_price
+    gross_sell_value = eth_bought * sell_price
+    
+    # 0.2% Simulated Fee (Exchange + Gas fees)
+    est_fees = (trade_amount_usdt + gross_sell_value) * 0.002
+    net_profit = (gross_sell_value - trade_amount_usdt) - est_fees
+
+    if net_profit > 0:
+        paper_wallet["USDT"] += net_profit
+        paper_wallet["total_profit"] += net_profit
+        paper_wallet["trades_count"] += 1
+
+        print("==================================================")
+        print(f"🚀 [PAPER TRADE EXECUTED #{paper_wallet['trades_count']}]")
+        print(f"🟢 Buy on {buy_venue} @ ${buy_price:.2f}")
+        print(f"🔴 Sell on {sell_venue} @ ${sell_price:.2f}")
+        print(f"💰 Net Profit (after fees): +${net_profit:.4f} USDT")
+        print(f"📊 New Paper Balance: ${paper_wallet['USDT']:.2f} USDT")
+        print("==================================================")
+
+# Continuous Monitoring & Paper Trading Loop
 def track_arbitrage():
-    print("Starting Arbitrage Monitoring...")
+    print("🤖 Starting Arbitrage Paper-Trading Bot...")
+    print(f"💼 Initial Balance: ${paper_wallet['USDT']} USDT")
+    
     while True:
         try:
             # Binance ETH/USDT
@@ -36,10 +86,12 @@ def track_arbitrage():
             # Spread Calculation
             spread = abs(cex_price - dex_price) / cex_price * 100
 
-            print(f"Binance: ${cex_price:.2f} | Uniswap V3: ${dex_price:.2f} | Spread: {spread:.2f}%")
+            print(f"Binance: ${cex_price:.2f} | Uniswap: ${dex_price:.2f} | Spread: {spread:.2f}%")
 
-            if spread >= 0.8:
-                print(f"🔥 ARBITRAGE OPPORTUNITY FOUND! Spread: {spread:.2f}% 🔥")
+            # Trade Condition: Spread >= 0.5% (Paper Trade trigger)
+            if spread >= 0.5:
+                print(f"⚡ Opportunity Detected! Spread: {spread:.2f}%")
+                simulate_paper_trade(cex_price, dex_price, spread)
 
         except Exception as e:
             print(f"Error fetching prices: {e}")
