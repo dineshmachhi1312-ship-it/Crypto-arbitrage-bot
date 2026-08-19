@@ -1,41 +1,51 @@
+import os
 import time
-import ccxt
 import requests
+import ccxt
+from threading import Thread
+from flask import Flask
 
-print("Starting DEX vs CEX Arbitrage Monitor...")
+# Flask server for Render Port Binding
+app = Flask(__name__)
 
-# CEX setup (Binance)
-cex = ccxt.binance()
-cex_symbol = 'ETH/USDT'
+@app.route('/')
+def home():
+    return "Arbitrage Bot is Running 24/7!"
 
-# DEX setup (Uniswap V3 via DexScreener API)
-dex_api_url = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 
-while True:
-    try:
-        # 1. Get CEX Price
-        cex_ticker = cex.fetch_ticker(cex_symbol)
-        cex_price = float(cex_ticker['last'])
+# Binance Setup
+binance = ccxt.binance()
 
-        # 2. Get DEX Price
-        response = requests.get(dex_api_url, timeout=5)
-        dex_data = response.json()
-        dex_price = float(dex_data['pair']['priceUsd'])
+# Arbitrage Monitoring Loop
+def track_arbitrage():
+    print("Starting Arbitrage Monitoring...")
+    while True:
+        try:
+            # Binance ETH/USDT
+            ticker = binance.fetch_ticker('ETH/USDT')
+            cex_price = ticker['last']
 
-        print(f"[CEX - Binance] ETH: ${cex_price:.2f} | [DEX - Uniswap] ETH: ${dex_price:.2f}")
+            # DexScreener Uniswap V3 ETH/USDT
+            dex_url = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+            response = requests.get(dex_url).json()
+            dex_price = float(response['pair']['priceUsd'])
 
-        # 3. Calculate Price Gap
-        diff = abs(cex_price - dex_price)
-        spread_pct = (diff / min(cex_price, dex_price)) * 100
+            # Spread Calculation
+            spread = abs(cex_price - dex_price) / cex_price * 100
 
-        print(f"Spread: ${diff:.2f} ({spread_pct:.2f}%)")
+            print(f"Binance: ${cex_price:.2f} | Uniswap V3: ${dex_price:.2f} | Spread: {spread:.2f}%")
 
-        if spread_pct > 0.8:  # 0.8% threshold
-            print(">>> DEX vs CEX ARBITRAGE OPPORTUNITY FOUND! <<<\n")
-        else:
-            print("No significant gap.\n")
+            if spread >= 0.8:
+                print(f"🔥 ARBITRAGE OPPORTUNITY FOUND! Spread: {spread:.2f}% 🔥")
 
-    except Exception as e:
-        print(f"Error fetching prices: {e}")
+        except Exception as e:
+            print(f"Error fetching prices: {e}")
 
-    time.sleep(10)
+        time.sleep(10)
+
+if __name__ == "__main__":
+    Thread(target=run_flask).start()
+    track_arbitrage()
